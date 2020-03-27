@@ -6,18 +6,20 @@
 #ifndef TRT_IMAGE_CLASSIFICATION_UTILS_H
 #define TRT_IMAGE_CLASSIFICATION_UTILS_H
 
-
+/* #include <cuda.h> */
+#include <cuda_runtime_api.h>
 #include <opencv2/opencv.hpp>
 #include <vector>
 #include <algorithm>
 #include <NvInfer.h>
 
-
 void cvImageToTensor(const cv::Mat & image, float *tensor, nvinfer1::Dims dimensions)
 {
-  const size_t channels = dimensions.d[0];
-  const size_t height = dimensions.d[1];
-  const size_t width = dimensions.d[2];
+  const size_t channels = dimensions.d[1];
+  const size_t height = dimensions.d[2];
+  const size_t width = dimensions.d[3];
+  std::cout << "chw: " << channels << ", " << height << ", " << width << std::endl;
+
   // TODO: validate dimensions match
   const size_t stridesCv[3] = { width * channels, channels, 1 };
   const size_t strides[3] = { height * width, width, 1 };
@@ -26,14 +28,48 @@ void cvImageToTensor(const cv::Mat & image, float *tensor, nvinfer1::Dims dimens
   {
     for (int j = 0; j < width; j++) 
     {
+      /* std::cout << "("; */
       for (int k = 0; k < channels; k++) 
       {
         const size_t offsetCv = i * stridesCv[0] + j * stridesCv[1] + k * stridesCv[2];
         const size_t offset = k * strides[0] + i * strides[1] + j * strides[2];
         tensor[offset] = (float) image.data[offsetCv];
+        /* std::cout << tensor[offset] << ","; */
       }
+      /* std::cout << "),"; */
     }
+    /* std::cout << std::endl; */
   }
+}
+
+void preprocessTensor(float *tensor,
+                      nvinfer1::Dims dimensions,
+                      std::vector<float> mean,
+                      std::vector<float> std)
+{
+  /* normalize */
+  /* ((channel[0] / 255) - mean[0]) / std[0] */
+
+  size_t channels = dimensions.d[1];
+  size_t height = dimensions.d[2];
+  size_t width = dimensions.d[3];
+  const size_t strides[3] = { height * width, width, 1 };
+
+  for (int i = 0; i < height; i++) 
+    {
+      for (int j = 0; j < width; j++) 
+        {
+          /* std::cout << "("; */
+          for (int k = 0; k < channels; k++) 
+            {
+              const size_t offset = k * strides[0] + i * strides[1] + j * strides[2];
+              tensor[offset] = ((tensor[offset] / 255) - mean[k]) / std[k];
+              /* std::cout << tensor[offset] << ","; */
+            }
+          /* std::cout << "),"; */
+        }
+      /* std::cout << std::endl; */
+    }
 }
 
 void preprocessVgg(float *tensor, nvinfer1::Dims dimensions)
