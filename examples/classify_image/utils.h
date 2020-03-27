@@ -12,13 +12,13 @@
 #include <vector>
 #include <algorithm>
 #include <NvInfer.h>
+#include <chrono>
 
 void cvImageToTensor(const cv::Mat & image, float *tensor, nvinfer1::Dims dimensions)
 {
   const size_t channels = dimensions.d[1];
   const size_t height = dimensions.d[2];
   const size_t width = dimensions.d[3];
-  std::cout << "chw: " << channels << ", " << height << ", " << width << std::endl;
 
   // TODO: validate dimensions match
   const size_t stridesCv[3] = { width * channels, channels, 1 };
@@ -28,17 +28,42 @@ void cvImageToTensor(const cv::Mat & image, float *tensor, nvinfer1::Dims dimens
   {
     for (int j = 0; j < width; j++) 
     {
-      /* std::cout << "("; */
       for (int k = 0; k < channels; k++) 
       {
         const size_t offsetCv = i * stridesCv[0] + j * stridesCv[1] + k * stridesCv[2];
         const size_t offset = k * strides[0] + i * strides[1] + j * strides[2];
         tensor[offset] = (float) image.data[offsetCv];
-        /* std::cout << tensor[offset] << ","; */
       }
-      /* std::cout << "),"; */
     }
-    /* std::cout << std::endl; */
+  }
+}
+
+bool read_labelfile(std::string filepath,
+                    std::vector<std::string>& labels)
+{
+  std::ifstream labelsFile(filepath);
+  if (!labelsFile.is_open()) {
+    std::cout << "\nCould not open label file." << std::endl;
+    return false;
+  }
+  std::string label;
+  while(getline(labelsFile, label)) {
+      labels.push_back(label);
+  }
+  return true;
+}
+
+void calc_softmax(float *data,
+                  size_t numOutput,
+                  std::vector<float>& probs)
+{
+  float exp_sum = 0.0;
+  for (int i=0; i<numOutput; ++i) {
+    exp_sum += exp(data[i]);
+  }
+
+  for (int i=0; i<numOutput; ++i) {
+    probs.push_back(exp(data[i]) / exp_sum);
   }
 }
 
@@ -59,16 +84,12 @@ void preprocessTensor(float *tensor,
     {
       for (int j = 0; j < width; j++) 
         {
-          /* std::cout << "("; */
           for (int k = 0; k < channels; k++) 
             {
               const size_t offset = k * strides[0] + i * strides[1] + j * strides[2];
               tensor[offset] = ((tensor[offset] / 255) - mean[k]) / std[k];
-              /* std::cout << tensor[offset] << ","; */
             }
-          /* std::cout << "),"; */
         }
-      /* std::cout << std::endl; */
     }
 }
 
