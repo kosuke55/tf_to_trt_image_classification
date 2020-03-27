@@ -11,17 +11,12 @@
 #include <opencv2/opencv.hpp>
 #include "utils.h"
 
-
-using namespace std;
-using namespace nvinfer1;
-
-
-class Logger : public ILogger
+class Logger : public nvinfer1::ILogger
 {
   void log(Severity severity, const char * msg) override
   {
     if (severity != Severity::kINFO)
-      cout << msg << endl;
+      std::cout << msg << std::endl;
   }
 } gLogger;
 
@@ -37,32 +32,32 @@ int main(int argc, char *argv[])
 {
   if (argc != 6)
   {
-    cout << "Usage: classify_image <image_file> <plan_file> <label_file> <input_name> <output_name>";
+    std::cout << "Usage: classify_image <image_file> <plan_file> <label_file> <input_name> <output_name>";
     return 0;
   }
 
-  string imageFilename = argv[1];
-  string planFilename = argv[2];
-  string labelFilename = argv[3];
-  string inputName = argv[4];
-  string outputName = argv[5];
+  std::string imageFilename = argv[1];
+  std::string planFilename = argv[2];
+  std::string labelFilename = argv[3];
+  std::string inputName = argv[4];
+  std::string outputName = argv[5];
 
   /* load the engine */
-  cout << "Loading TensorRT engine from plan file..." << endl;
-  ifstream planFile(planFilename); 
+  std::cout << "Loading TensorRT engine from plan file..." << std::endl;
+  std::ifstream planFile(planFilename); 
 
   if (!planFile.is_open())
   {
-    cout << "Could not open plan file." << endl;
+    std::cout << "Could not open plan file." << std::endl;
     return 1;
   }
 
-  stringstream planBuffer;
+  std::stringstream planBuffer;
   planBuffer << planFile.rdbuf();
-  string plan = planBuffer.str();
-  IRuntime *runtime = createInferRuntime(gLogger);
-  ICudaEngine *engine = runtime->deserializeCudaEngine((void*)plan.data(), plan.size(), nullptr);
-  IExecutionContext *context = engine->createExecutionContext();
+  std::string plan = planBuffer.str();
+  nvinfer1::IRuntime *runtime = nvinfer1::createInferRuntime(gLogger);
+  nvinfer1::ICudaEngine *engine = runtime->deserializeCudaEngine((void*)plan.data(), plan.size(), nullptr);
+  nvinfer1::IExecutionContext *context = engine->createExecutionContext();
   
   /* get the input / output dimensions */
   int inputBindingIndex, outputBindingIndex;
@@ -71,35 +66,35 @@ int main(int argc, char *argv[])
 
   if (inputBindingIndex < 0)
   {
-    cout << "Invalid input name." << endl;
+    std::cout << "Invalid input name." << std::endl;
     return 1;
   }
 
   if (outputBindingIndex < 0)
   {
-    cout << "Invalid output name." << endl;
+    std::cout << "Invalid output name." << std::endl;
     return 1;
   }
 
-  Dims inputDims, outputDims;
+  nvinfer1::Dims inputDims, outputDims;
   inputDims = engine->getBindingDimensions(inputBindingIndex);
   outputDims = engine->getBindingDimensions(outputBindingIndex);
 
-  cerr << "input b: " << inputDims.d[0] << endl;
-  cerr << "input c: " << inputDims.d[1] << endl;
-  cerr << "input h: " << inputDims.d[2] << endl;
-  cerr << "input w: " << inputDims.d[3] << endl;
+  std::cerr << "input b: " << inputDims.d[0] << std::endl;
+  std::cerr << "input c: " << inputDims.d[1] << std::endl;
+  std::cerr << "input h: " << inputDims.d[2] << std::endl;
+  std::cerr << "input w: " << inputDims.d[3] << std::endl;
 
   int inputWidth, inputHeight;
   inputHeight = inputDims.d[2];
   inputWidth = inputDims.d[3];
 
   /* read image, convert color, and resize */
-  cout << "read input image" << endl;
+  std::cout << "read input image" << std::endl;
   cv::Mat image = cv::imread(imageFilename, CV_LOAD_IMAGE_COLOR);
   if (image.data == NULL)
   {
-    cout << "Could not read image from file." << endl;
+    std::cout << "Could not read image from file." << std::endl;
     return 1;
   }
   cv::cvtColor(image, image, cv::COLOR_BGR2RGB, 3);
@@ -110,15 +105,12 @@ int main(int argc, char *argv[])
   size_t numInput, numOutput;
   numInput = numTensorElements(inputDims);
   numOutput = numTensorElements(outputDims);
-  cout << "numInput: " << numInput << endl;
-  cout << "numOutput: " << numOutput << endl;
-
   inputDataHost = (float*) malloc(numInput * sizeof(float));
   outputDataHost = (float*) malloc(numOutput * sizeof(float));
 
   cvImageToTensor(image, inputDataHost, inputDims);
-  vector<float> mean{0.485, 0.456, 0.406};
-  vector<float> std{0.229, 0.224, 0.225};
+  std::vector<float> mean{0.485, 0.456, 0.406};
+  std::vector<float> std{0.229, 0.224, 0.225};
   preprocessTensor(inputDataHost, inputDims, mean, std);
 
   /* transfer to device */
@@ -131,57 +123,77 @@ int main(int argc, char *argv[])
   bindings[outputBindingIndex] = (void*) outputDataDevice;
 
   /* execute engine */
-  cout << "Executing inference engine..." << endl;
+  std::cout << "Executing inference engine..." << std::endl;
   const int kBatchSize = 1;
   context->execute(kBatchSize, bindings);
 
   /* transfer output back to host */
   cudaMemcpy(outputDataHost, outputDataDevice, numOutput * sizeof(float), cudaMemcpyDeviceToHost);
 
-  cout << "numOutput: " << numOutput << endl;
+  std::cout << "numOutput: " << numOutput << std::endl;
+
+  float exp_sum = 0.0;
   for (int i=0; i<numOutput; ++i) {
-    cout << "outputDataHost[" << i << "]: " << outputDataHost[i] << endl;
+    exp_sum += exp(outputDataHost[i]);
+  }
+
+  std::vector<float> probs;
+  for (int i=0; i<numOutput; ++i) {
+    float v = outputDataHost[i];
+    v = exp(v) / exp_sum;
+    probs.push_back(v);
+    std::cout << probs[i] << std::endl;
   }
 
   /* parse output */
-  vector<size_t> sortedIndices = argsort(outputDataHost, outputDims);
+  std::vector<size_t> sortedIndices = argsort(outputDataHost, outputDims);
 
-  cout << "\nThe top-5 indices are: ";
+  std::cout << "\nThe top-5 indices are: ";
   for (int i = 0; i < 5; i++)
-    cout << sortedIndices[i] << " ";
+    std::cout << sortedIndices[i] << " ";
 
-  ifstream labelsFile(labelFilename);
-
+  std::ifstream labelsFile(labelFilename);
   if (!labelsFile.is_open())
   {
-    cout << "\nCould not open label file." << endl;
+    std::cout << "\nCould not open label file." << std::endl;
     return 1;
   }
-
-  vector<string> labelMap;
-  string label;
+  std::vector<std::string> labelMap;
+  std::string label;
   while(getline(labelsFile, label))
   {
     labelMap.push_back(label);
   }
 
-  cout << "\nWhich corresponds to class labels: ";
+  std::cout << "\nWhich corresponds to class labels: ";
   for (int i = 0; i < 5; i++)
-    cout << endl << i << ". " << labelMap[sortedIndices[i]];
-  cout << endl;
-
-  cout << "highest match label: " << labelMap[sortedIndices[0]] << endl;
+    std::cout << std::endl << i << ": " << labelMap[sortedIndices[i]]
+         << ", score: " << probs[sortedIndices[i]] * 100;
+  std::cout << std::endl;
 
   /* clean up */
+  std::cout << 0 << std::endl;
   runtime->destroy();
+
+  std::cout << 0 << std::endl;
   engine->destroy();
+
+  std::cout << 1 << std::endl;
   context->destroy();
+
+  std::cout << 2 << std::endl;
   free(inputDataHost);
+
+  std::cout << 3 << std::endl;
   free(outputDataHost);
+
+  std::cout << 4 << std::endl;
   cudaFree(inputDataDevice);
+
+  std::cout << 5 << std::endl;
   cudaFree(outputDataDevice);
 
-  cout << "end proccess " << endl;
+  std::cout << "end proccess " << std::endl;
 
   return 0;
 }
