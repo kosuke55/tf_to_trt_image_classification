@@ -62,3 +62,10 @@ target_link_libraries(classify_image_sample
   ${CUDNN_LIBRARY}
   )
 
+add_executable(engine_builder_sample
+  engine_builder.cpp)
+target_link_libraries(engine_builder_sample
+  ${NVINFER}
+  ${NVPARSERS}
+  ${NVONNXPARSERS}
+  )
