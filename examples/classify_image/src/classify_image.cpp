@@ -3,7 +3,6 @@
  * Full license terms provided in LICENSE.md file.
  */
 
-
 #include <iostream>
 #include <fstream>
 #include <sstream>

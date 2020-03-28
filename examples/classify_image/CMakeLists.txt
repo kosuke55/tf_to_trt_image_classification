@@ -49,8 +49,12 @@ find_package(OpenCV REQUIRED)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
+include_directories(
+  include
+  )
+
 add_executable(classify_image_sample
-  classify_image.cpp)
+  src/classify_image.cpp)
 target_link_libraries(classify_image_sample
   ${OpenCV_LIBS}
   ${NVINFER}
@@ -63,7 +67,7 @@ target_link_libraries(classify_image_sample
   )
 
 add_executable(engine_builder_sample
-  engine_builder.cpp)
+  src/engine_builder.cpp)
 target_link_libraries(engine_builder_sample
   ${NVINFER}
   ${NVPARSERS}
